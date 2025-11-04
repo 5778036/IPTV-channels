@@ -1,31 +1,37 @@
-#基于的基础镜像
+# 基于的基础镜像
 FROM python:3.11.6-slim-bullseye
 
-#代码添加到app文件夹
-ADD . /app
-# 设置app文件夹是工作目录
+# 设置环境变量
+ENV PYTHONUNBUFFERED=1 \
+    FLASK_APP=app.py \
+    FLASK_ENV=production \
+    TIME_ZONE=Asia/Shanghai \
+    LC_ALL=C.UTF-8
+
+# 设置工作目录
 WORKDIR /app
 
-ENV PYTHONUNBUFFERED=0
-# 安装支持
+# 先复制 requirements.txt 并安装依赖
+COPY requirements.txt .
+
+# 安装系统依赖和 Python 包
+RUN apt-get update && apt-get install -y --no-install-recommends cron \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean \
+    && pip install --no-cache-dir -r requirements.txt \
+    # 修复 DES3.py 文件
+    && sed -i '84,85 s/^/#/' /usr/local/lib/python3.11/site-packages/Crypto/Cipher/DES3.py \
+    # 设置时区
+    && ln -snf /usr/share/zoneinfo/$TIME_ZONE /etc/localtime \
+    && echo $TIME_ZONE > /etc/timezone
+
+# 复制应用代码
+COPY . .
+
+# 暴露端口
 EXPOSE 3001
-ENV FLASK_APP=app.py
-ENV TIME_ZONE Asia/Shanghai
 
-RUN apt-get update && apt-get install -y --no-install-recommends cron && rm -rf /var/lib/apt/lists/* && apt-get clean 
-
-RUN pip install --no-cache-dir -r requirements.txt
-
-#/usr/local/lib/python3.11/site-packages/Crypto/Cipher/DES3.py 84、85
-RUN sed -i '84 s/^/#/' /usr/local/lib/python3.11/site-packages/Crypto/Cipher/DES3.py
-RUN sed -i '85 s/^/#/' /usr/local/lib/python3.11/site-packages/Crypto/Cipher/DES3.py
-
-RUN ln -snf /usr/share/zoneinfo/$TIME_ZONE /etc/localtime && echo $TIME_ZONE > /etc/timezone
-
-ENV LC_ALL C.UTF-8
-
-# 添加启动脚本并设置执行权限
-# COPY start.sh /app/start.sh
+# 设置启动脚本权限
 RUN chmod +x /app/start.sh
 
 # 使用启动脚本作为容器的入口点
